@@ -1,67 +1,91 @@
 #include<iostream>
 #include<thread>
 #include<list>
-#include<mutex>
+#include<mutex>   
 #include<ctime>
 #include<iostream>
 #include<memory>
+#include<vector>
 #include<chrono>
 using namespace std::chrono;
 
+std::mutex m1, m2;
+
+
 class Blocking_Queue
 {
-	std::list<unsigned int> message_queue;	
-	std::mutex m1, m2;
+	std::list<std::pair<std::thread::id,int>> msg_queue;  // PORED SAMOG BROJA CUVAM I ID PRODUCER-a JE GENERISAO TAJ BROJ
 public:
-	void LoadToMessageQueue()
+	void LoadToMessageQueue(std::thread::id this_id)  
 	{
-		std::lock_guard<std::mutex> lg1(m1);   // exception safety
+		std::lock_guard<std::mutex> lg1(m1);
 		srand(time(0));
-		message_queue.push_back(rand() % 10);
+		msg_queue.push_back(std::make_pair(this_id, rand() % 10));
 		std::this_thread::sleep_for(milliseconds(1000));
 	}
-	void PrintFromMessageQueue()
+	void PrintFromMessageQueue(std::thread::id this_id)  // PORED SAMOG BROJA CUVAM I ID CONSUMER-a JE ISPISAO TAJ BROJ
 	{
-		std::lock_guard<std::mutex> lg2(m2);     // exception safety
-		if (message_queue.size() != 0)
-		{
-			std::cout << *message_queue.begin() << std::endl;
-			message_queue.pop_front();
+		std::lock_guard<std::mutex> lg2(m2);
+		if (msg_queue.size() != 0)
+		{											
+			std::cout << "(" << msg_queue.begin()->first << "," << this_id << ") => " << msg_queue.begin()->second << std::endl; // (ID PRODUCER-a, ID CONSUMER-a) => BROJ
+			msg_queue.pop_front();
 			std::this_thread::sleep_for(milliseconds(1000));
 		}
-	}					
+	}
 };
 
+Blocking_Queue bq;
 
-void demo(int p, int c)
+void Produce()
 {
-	std::unique_ptr<std::thread[]> producers = std::make_unique<std::thread[]>(p);
-	std::unique_ptr<std::thread[]> consumers = std::make_unique<std::thread[]>(c);
-	Blocking_Queue bq;
 	while (true)
 	{
-		for (int i = 0; i < p; i++)
-		{
-			producers[i] = std::thread(&Blocking_Queue::LoadToMessageQueue, &bq);
-		}
-		for (int i = 0; i < c; i++)
-		{
-			consumers[i] = std::thread(&Blocking_Queue::PrintFromMessageQueue, &bq);
-		}
-		for (unsigned int i = 0; i < p; ++i)
-		{
-			if (producers[i].joinable())
-				producers[i].join();
-		}
-		for (unsigned int i = 0; i < c; ++i)
-		{
-			if (consumers[i].joinable())
-				consumers[i].join();
-		}
+		bq.LoadToMessageQueue(std::this_thread::get_id());
+		std::this_thread::sleep_for(milliseconds(500));
 	}
 }
 
+void Consume()
+{
+	while (true)
+	{
+		bq.PrintFromMessageQueue(std::this_thread::get_id());
+		std::this_thread::sleep_for(milliseconds(500));
+	}
+}
+
+
 int main()
 {
-	demo(5, 4);
+	int num_producers = 5;
+	int num_consumers = 4;
+	std::vector<std::thread> producers;
+	std::vector<std::thread> consumers;
+
+
+	for (int i = 0; i < num_producers; i++) 
+	{
+		producers.emplace_back(std::thread(Produce));
+	}
+
+	for (int i = 0; i < num_consumers; i++)
+	{
+		consumers.emplace_back(std::thread(Consume));
+	}
+
+	for (int i = 0; i < num_producers; i++)
+	{
+		if (producers[i].joinable())
+		{
+			producers[i].join();
+		}
+	} 
+	for (int i = 0; i < num_consumers; i++)
+	{
+		if (consumers[i].joinable())
+		{
+			consumers[i].join();
+		}
+	}
 }
