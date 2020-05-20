@@ -14,7 +14,7 @@ class Blocking_Queue
 	std::list<unsigned int> message_queue;			 // arrray of numbers
 	std::thread* producers;							 // pointer to array of producer threads
 	std::thread* consumers;							 // pointer to array of consumer threads
-	std::mutex m1,m2;
+	std::mutex m1, m2;
 public:
 	Blocking_Queue(unsigned int p, unsigned int c);  // parametrized constructor
 	~Blocking_Queue();								 // destructor
@@ -25,8 +25,8 @@ public:
 
 Blocking_Queue::Blocking_Queue(unsigned int p, unsigned int c)
 {
-	producers = new std::thread[num_producers=p]();
-	consumers = new std::thread[num_consumers=c]();
+	producers = new std::thread[num_producers = p]();
+	consumers = new std::thread[num_consumers = c]();
 }
 
 Blocking_Queue::~Blocking_Queue()
@@ -39,26 +39,24 @@ Blocking_Queue::~Blocking_Queue()
 
 void Blocking_Queue::LoadToMessageQueue()
 {
-	m1.lock();
+	std::lock_guard<std::mutex> lg1(m1);   // exception safety
 	srand(time(0));
 	message_queue.push_back(rand() % 10);
 	std::this_thread::sleep_for(milliseconds(1000));
-	m1.unlock();
 }
 
 void Blocking_Queue::PrintFromMessageQueue()
 {
-	m2.lock();
-	if (message_queue.size()!=0)				// in order to avoid dereferencing message_queue.end() iterator
+	std::lock_guard<std::mutex> lg2(m2);     // exception safety
+	if (message_queue.size() != 0)			
 	{
 		std::cout << *message_queue.begin() << std::endl;
 		message_queue.pop_front();
 		std::this_thread::sleep_for(milliseconds(1000));
 	}
-	m2.unlock();
 }
 
-void Blocking_Queue::start() 
+void Blocking_Queue::start()
 {
 	while (true)
 	{
