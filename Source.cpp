@@ -2,47 +2,54 @@
 #include<thread>
 #include<list>
 #include<mutex>   
-#include<ctime>
 #include<iostream>
 #include<memory>
+#include<condition_variable>
 #include<vector>
-#include<chrono>
-using namespace std::chrono;
 
-std::mutex m1, m2;
-
+std::mutex m3, m4;
 
 class Blocking_Queue
 {
-	std::list<std::pair<std::thread::id,int>> msg_queue;  // PORED SAMOG BROJA CUVAM I ID PRODUCER-a JE GENERISAO TAJ BROJ
+	std::list<int> msg_queue;
+	std::condition_variable cv1, cv2;
+	std::mutex m;
+	int max;
 public:
-	void LoadToMessageQueue(std::thread::id this_id)  
-	{
-		std::lock_guard<std::mutex> lg1(m1);
-		srand(time(0));
-		msg_queue.push_back(std::make_pair(this_id, rand() % 10));
-		std::this_thread::sleep_for(milliseconds(1000));
-	}
-	void PrintFromMessageQueue(std::thread::id this_id)  // PORED SAMOG BROJA CUVAM I ID CONSUMER-a JE ISPISAO TAJ BROJ
-	{
-		std::lock_guard<std::mutex> lg2(m2);
-		if (msg_queue.size() != 0)
-		{											
-			std::cout << "(" << msg_queue.begin()->first << "," << this_id << ") => " << msg_queue.begin()->second << std::endl; // (ID PRODUCER-a, ID CONSUMER-a) => BROJ
-			msg_queue.pop_front();
-			std::this_thread::sleep_for(milliseconds(1000));
-		}
-	}
+	Blocking_Queue(int n):max(n){}
+	void push_back(int n);
+	int pop_front();
 };
 
-Blocking_Queue bq;
+
+void Blocking_Queue::push_back(int n)
+{
+	std::unique_lock<std::mutex> ul1(m);
+	cv1.wait(ul1, [&]() { return msg_queue.size() < max; });
+	msg_queue.push_back(n);
+	cv2.notify_all();
+}
+
+int Blocking_Queue::pop_front()
+{
+	std::unique_lock<std::mutex> ul2(m);
+	cv2.wait(ul2, [&]() { return msg_queue.size() > 0; });
+	int temp = *msg_queue.begin();
+	msg_queue.pop_front();
+	cv1.notify_all();
+	return temp;
+}
+
+//---------------------------------------------------------------//
+
+Blocking_Queue bq(100);
 
 void Produce()
 {
 	while (true)
 	{
-		bq.LoadToMessageQueue(std::this_thread::get_id());
-		std::this_thread::sleep_for(milliseconds(500));
+		std::unique_lock<std::mutex> ul1(m3);
+		bq.push_back(rand()%10);
 	}
 }
 
@@ -50,21 +57,22 @@ void Consume()
 {
 	while (true)
 	{
-		bq.PrintFromMessageQueue(std::this_thread::get_id());
-		std::this_thread::sleep_for(milliseconds(500));
+		std::unique_lock<std::mutex> ul2(m4);
+		std::cout << bq.pop_front() << std::endl;
+
 	}
 }
 
 
 int main()
 {
-	int num_producers = 5;
-	int num_consumers = 4;
+	int num_producers = 4;
+	int num_consumers = 5;
 	std::vector<std::thread> producers;
 	std::vector<std::thread> consumers;
 
 
-	for (int i = 0; i < num_producers; i++) 
+	for (int i = 0; i < num_producers; i++)
 	{
 		producers.emplace_back(std::thread(Produce));
 	}
@@ -80,7 +88,7 @@ int main()
 		{
 			producers[i].join();
 		}
-	} 
+	}
 	for (int i = 0; i < num_consumers; i++)
 	{
 		if (consumers[i].joinable())
@@ -89,3 +97,4 @@ int main()
 		}
 	}
 }
+
