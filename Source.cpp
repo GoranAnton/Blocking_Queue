@@ -6,35 +6,38 @@
 #include<memory>
 #include<condition_variable>
 #include<vector>
+#include<string>
 
-std::mutex m3, m4;
+std::mutex m3;
 
+template<typename T>
 class Blocking_Queue
 {
-	std::list<int> msg_queue;
+	std::list<T> msg_queue;
 	std::condition_variable cv1, cv2;
 	std::mutex m;
 	int max;
 public:
-	Blocking_Queue(int n):max(n){}
-	void push_back(int n);
-	int pop_front();
+	Blocking_Queue(int n) :max(n) {}
+	void push_back(T t);
+	T pop_front();
 };
 
-
-void Blocking_Queue::push_back(int n)
+template<typename T>
+void Blocking_Queue<T>::push_back(T t)
 {
 	std::unique_lock<std::mutex> ul1(m);
 	cv1.wait(ul1, [&]() { return msg_queue.size() < max; });
-	msg_queue.push_back(n);
+	msg_queue.push_back(t);
 	cv2.notify_all();
 }
 
-int Blocking_Queue::pop_front()
+template<typename T>
+T Blocking_Queue<T>::pop_front()
 {
 	std::unique_lock<std::mutex> ul2(m);
 	cv2.wait(ul2, [&]() { return msg_queue.size() > 0; });
-	int temp = *msg_queue.begin();
+	T temp = *msg_queue.begin();
 	msg_queue.pop_front();
 	cv1.notify_all();
 	return temp;
@@ -42,14 +45,20 @@ int Blocking_Queue::pop_front()
 
 //---------------------------------------------------------------//
 
-Blocking_Queue bq(100);
+Blocking_Queue<std::string> bq(100);
+
+std::string Generate()
+{
+	std::string i = "abc ";
+	static int c = 1;
+	return i+std::to_string(c++);
+}
 
 void Produce()
 {
 	while (true)
 	{
-		std::unique_lock<std::mutex> ul1(m3);
-		bq.push_back(rand()%10);
+		bq.push_back(Generate());
 	}
 }
 
@@ -57,9 +66,8 @@ void Consume()
 {
 	while (true)
 	{
-		std::unique_lock<std::mutex> ul2(m4);
+		std::unique_lock<std::mutex> ul2(m3);
 		std::cout << bq.pop_front() << std::endl;
-
 	}
 }
 
