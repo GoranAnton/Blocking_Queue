@@ -1,5 +1,4 @@
 #include<iostream>
-#include<fstream>
 #include<thread>
 #include<list>
 #include<mutex>   
@@ -8,36 +7,36 @@
 #include<condition_variable>
 #include<vector>
 #include<string>
+#include"json.hpp"
+using json = nlohmann::json;
 
-std::mutex m3, m4;
+std::mutex m3;
 
 class Blocking_Queue
 {
-	std::list<std::string> msg_queue;
+	std::list<json> msg_queue;
 	std::condition_variable cv1, cv2;
 	std::mutex m;
 	int max;
 public:
 	Blocking_Queue(int n) :max(n) {}
-	void push_back(std::string);
-	std::string pop_front();
+	void push_back(json j);
+	json pop_front();
 };
 
-
-void Blocking_Queue::push_back(std::string s)
+void Blocking_Queue::push_back(json j)
 {
 	std::unique_lock<std::mutex> ul1(m);
 	cv1.wait(ul1, [&]() { return msg_queue.size() < max; });
-	msg_queue.push_back(s);
+	msg_queue.push_back(j);
 	cv2.notify_all();
 }
 
-
-std::string Blocking_Queue::pop_front()
+json Blocking_Queue::pop_front()
 {
 	std::unique_lock<std::mutex> ul2(m);
 	cv2.wait(ul2, [&]() { return msg_queue.size() > 0; });
-	std::string temp = *msg_queue.begin();
+	json temp = *msg_queue.begin();
 	msg_queue.pop_front();
 	cv1.notify_all();
 	return temp;
@@ -47,11 +46,12 @@ std::string Blocking_Queue::pop_front()
 
 Blocking_Queue bq(100);
 
-void Produce(std::string* niz, int n)
+
+void Produce()
 {
-	for(int i=0; i<n; ++i)
+	while (true)
 	{
-		bq.push_back(niz[i]);
+		bq.push_back(json{ {"a",rand()%10},{"b",rand()%10} });
 	}
 }
 
@@ -59,35 +59,39 @@ void Consume()
 {
 	while (true)
 	{
-		std::string f = bq.pop_front();
-		std::ifstream in(f);
-		std::string s;
-		m4.lock();
-		std::cout << "Id thread-a: " << std::this_thread::get_id() << std::endl;
-		while (getline(in, s))
-		{
-			std::cout << s << std::endl;
-		}
-		m4.unlock();
-		std::cout << std::endl;
-		in.close();
+		std::string s = bq.pop_front().dump();
+		auto parsed = json::parse(s.c_str());
+		int a = parsed["a"];
+		int b = parsed["b"];
+		std::cout << a + b << std::endl;
 	}
 }
 
-void read(std::string* niz, int n)
-{
-	std::thread Producer(Produce, niz, n);
 
+int main()
+{
+	int num_producers = 4;
 	int num_consumers = 5;
+	std::vector<std::thread> producers;
 	std::vector<std::thread> consumers;
+
+
+	for (int i = 0; i < num_producers; i++)
+	{
+		producers.emplace_back(std::thread(Produce));
+	}
+
 	for (int i = 0; i < num_consumers; i++)
 	{
 		consumers.emplace_back(std::thread(Consume));
 	}
 
-	if (Producer.joinable())
+	for (int i = 0; i < num_producers; i++)
 	{
-		Producer.join();
+		if (producers[i].joinable())
+		{
+			producers[i].join();
+		}
 	}
 	for (int i = 0; i < num_consumers; i++)
 	{
@@ -96,17 +100,5 @@ void read(std::string* niz, int n)
 			consumers[i].join();
 		}
 	}
-}
-
-int main()
-{
-	std::string niz[] = {
-	"C:\\Users\\goran.antonijevic\\OneDrive - ENDAVA\\Desktop\\jedan.txt",
-	"C:\\Users\\goran.antonijevic\\OneDrive - ENDAVA\\Desktop\\dva.txt",
-	"C:\\Users\\goran.antonijevic\\OneDrive - ENDAVA\\Desktop\\tri.txt",
-	"C:\\Users\\goran.antonijevic\\OneDrive - ENDAVA\\Desktop\\cetiri.txt",
-	"C:\\Users\\goran.antonijevic\\OneDrive - ENDAVA\\Desktop\\pet.txt"
-	};
-	read(niz, 5);
 }
 
