@@ -14,29 +14,29 @@ std::mutex m3;
 
 class Blocking_Queue
 {
-	std::list<json> msg_queue;
+	std::list<std::string> msg_queue;
 	std::condition_variable cv1, cv2;
 	std::mutex m;
 	int max;
 public:
 	Blocking_Queue(int n) :max(n) {}
-	void push_back(json j);
-	json pop_front();
+	void push_back(const std::string& s);
+	std::string pop_front();
 };
 
-void Blocking_Queue::push_back(json j)
+void Blocking_Queue::push_back(const std::string& s)
 {
 	std::unique_lock<std::mutex> ul1(m);
 	cv1.wait(ul1, [&]() { return msg_queue.size() < max; });
-	msg_queue.push_back(j);
+	msg_queue.push_back(s);
 	cv2.notify_all();
 }
 
-json Blocking_Queue::pop_front()
+std::string Blocking_Queue::pop_front()
 {
 	std::unique_lock<std::mutex> ul2(m);
 	cv2.wait(ul2, [&]() { return msg_queue.size() > 0; });
-	json temp = *msg_queue.begin();
+	std::string temp = *msg_queue.begin();
 	msg_queue.pop_front();
 	cv1.notify_all();
 	return temp;
@@ -51,7 +51,8 @@ void Produce()
 {
 	while (true)
 	{
-		bq.push_back(json{ {"a",rand()%10},{"b",rand()%10} });
+		json j = { { "a",rand() % 10 }, { "b",rand() % 10 } };
+		bq.push_back(j.dump());
 	}
 }
 
@@ -59,8 +60,7 @@ void Consume()
 {
 	while (true)
 	{
-		std::string s = bq.pop_front().dump();
-		auto parsed = json::parse(s.c_str());
+		auto parsed = json::parse(bq.pop_front());
 		int a = parsed["a"];
 		int b = parsed["b"];
 		std::cout << a + b << std::endl;
